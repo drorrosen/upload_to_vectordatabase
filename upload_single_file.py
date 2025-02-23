@@ -207,6 +207,18 @@ def extract_text_from_pdf(pdf_path):
         text += page.extract_text() + "\n\n"
     return text
 
+def encode_filename(filename):
+    """Encode Hebrew filename to a safe ASCII format"""
+    encoded = hashlib.md5(filename.encode('utf-8')).hexdigest()[:8]
+    return f"{encoded}_{filename}"
+
+def decode_filename(encoded_filename):
+    """Decode the filename back to its original form"""
+    if '_' in encoded_filename:
+        _, original = encoded_filename.split('_', 1)
+        return original
+    return encoded_filename
+
 def upload_single_file(file_path):
     """Upload a single text or PDF file to Pinecone"""
     with st.container():
@@ -247,17 +259,20 @@ def upload_single_file(file_path):
             chunks = text_splitter.split_text(content)
             st.write(f"Split into {len(chunks)} chunks")
             
-            # Create vectors directly for Pinecone
+            # Encode the filename for safe storage
+            safe_filename = encode_filename(file_path.name)
+            
             vectors = []
             for i, chunk in enumerate(chunks):
                 embedding = embeddings_model.embed_query(chunk)
                 
-                # Create vector with minimal metadata and safe ID
+                # Use encoded filename in metadata
                 vector = {
-                    'id': get_safe_id(file_path.name, i),
+                    'id': get_safe_id(safe_filename, i),
                     'values': embedding,
                     'metadata': {
-                        'file': file_path.name,
+                        'file': safe_filename,  # Store encoded filename
+                        'original_file': file_path.name,  # Store original filename
                         'chunk': i,
                         'total_chunks': len(chunks)
                     }
@@ -310,6 +325,62 @@ def get_available_documents(vector_store):
         st.error(f"Error fetching documents: {str(e)}")
         return []
 
+def get_document_count(index, namespace="Default"):
+    """Get the total count of vectors in the index"""
+    try:
+        stats = index.describe_index_stats()
+        namespace_stats = stats.namespaces.get(namespace, {})
+        return namespace_stats.vector_count
+    except Exception as e:
+        st.error(f"Error getting document count: {str(e)}")
+        return 0
+
+def list_documents_in_pinecone(index, namespace="Default"):
+    """Fetch and display documents stored in Pinecone"""
+    try:
+        # Query index stats
+        stats = index.describe_index_stats()
+        total_vectors = get_document_count(index, namespace)
+        
+        # Display stats in an info box
+        st.info(f"""
+        📊 **סטטיסטיקות המאגר:**
+        - סך הכל וקטורים: {total_vectors:,}
+        - namespace: {namespace}
+        """)
+        
+        # Query to fetch some recent documents
+        fetch_response = index.query(
+            vector=[0] * 1536,  # dummy vector
+            top_k=100,
+            namespace=namespace,
+            include_metadata=True
+        )
+        
+        if fetch_response.matches:
+            # Create a set of unique filenames
+            unique_files = set()
+            for match in fetch_response.matches:
+                if 'original_file' in match.metadata:
+                    # Use the original filename for display
+                    unique_files.add(match.metadata['original_file'])
+                elif 'file' in match.metadata:
+                    # Fallback to decoded filename if original not found
+                    unique_files.add(decode_filename(match.metadata['file']))
+            
+            # Display the list of unique documents
+            st.markdown("### 📑 מסמכים במאגר:")
+            st.markdown('<div class="document-list">', unsafe_allow_html=True)
+            for file in sorted(unique_files):
+                st.markdown(f'<div class="document-item">{file}</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+        else:
+            st.warning("לא נמצאו מסמכים במאגר")
+            
+    except Exception as e:
+        st.error(f"שגיאה בקבלת רשימת המסמכים: {str(e)}")
+
 def main():
     # Add secrets check at the start of main
     check_secrets()
@@ -322,22 +393,18 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # Initialize vector store for document listing
+    # Initialize Pinecone
     try:
-        embeddings_model = OpenAIEmbeddings(
-            openai_api_key=OPENAI_API_KEY,
-            model="text-embedding-3-large"
-        )
-        vector_store = PineconeVectorStore.from_existing_index(
-            index_name="index",
-            embedding=embeddings_model,
-            namespace="Default"
+        pc = Pinecone(api_key=PINECONE_API_KEY)
+        index = pc.Index(
+            "index",
+            host="index-fmrj1el.svc.aped-4627-b74a.pinecone.io"
         )
     except Exception as e:
-        st.error(f"Error initializing vector store: {str(e)}")
-        vector_store = None
+        st.error(f"Error initializing Pinecone: {str(e)}")
+        st.stop()
     
-    # Create single column layout
+    # File upload section
     uploaded_file = st.file_uploader("בחר קובץ להעלאה", type=['pdf', 'txt'])
     
     if uploaded_file is not None:
@@ -352,6 +419,16 @@ def main():
                 if temp_path.exists():
                     temp_path.unlink()
     
+    # Add a separator
+    st.markdown("---")
+    
+    # Document listing section
+    st.markdown("### מסמכים קיימים במערכת")
+    if st.button("רענן רשימת מסמכים"):
+        list_documents_in_pinecone(index)
+    else:
+        list_documents_in_pinecone(index)
+
     # Footer
     st.markdown("""
     <div class="footer">
