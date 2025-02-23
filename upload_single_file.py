@@ -337,43 +337,20 @@ def main():
         st.error(f"Error initializing vector store: {str(e)}")
         vector_store = None
     
-    # Create two columns
-    col1, col2 = st.columns([2, 1])
+    # Create single column layout
+    uploaded_file = st.file_uploader("בחר קובץ להעלאה", type=['pdf', 'txt'])
     
-    with col1:
-        uploaded_file = st.file_uploader("בחר קובץ להעלאה", type=['pdf', 'txt'])
-        
-        if uploaded_file is not None:
-            with st.spinner('מעבד את הקובץ...'):
-                temp_path = Path(f"temp_{uploaded_file.name}")
-                with open(temp_path, "wb") as f:
-                    f.write(uploaded_file.getvalue())
-                
-                try:
-                    upload_single_file(temp_path)
-                finally:
-                    if temp_path.exists():
-                        temp_path.unlink()
-    
-    with col2:
-        st.markdown('<div class="sidebar-header">מסמכים במערכת</div>', unsafe_allow_html=True)
-        
-        # Add auto-refresh placeholder
-        doc_list_placeholder = st.empty()
-        
-        # Auto-refresh documents every 30 seconds
-        while True:
-            if vector_store:
-                documents = get_available_documents(vector_store)
-                with doc_list_placeholder.container():
-                    if documents:
-                        for doc in documents:
-                            st.markdown(f'<div class="document-item">📑 {doc}</div>', 
-                                      unsafe_allow_html=True)
-                    else:
-                        st.info("אין מסמכים במערכת")
+    if uploaded_file is not None:
+        with st.spinner('מעבד את הקובץ...'):
+            temp_path = Path(f"temp_{uploaded_file.name}")
+            with open(temp_path, "wb") as f:
+                f.write(uploaded_file.getvalue())
             
-            time.sleep(30)  # Wait for 30 seconds before next refresh
+            try:
+                upload_single_file(temp_path)
+            finally:
+                if temp_path.exists():
+                    temp_path.unlink()
     
     # Footer
     st.markdown("""
