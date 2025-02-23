@@ -113,12 +113,22 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ---------------------------
+# API Key Setup from Secrets
+# ---------------------------
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
+PINECONE_ENVIRONMENT = "us-east-1"  # Hardcoded as in app-pinecone.py
+
+# Set Pinecone environment variables
+os.environ["PINECONE_API_KEY"] = PINECONE_API_KEY
+os.environ["PINECONE_ENVIRONMENT"] = PINECONE_ENVIRONMENT
+
 def check_secrets():
     """Check if all required secrets are configured"""
     required_secrets = [
         "PINECONE_API_KEY",
         "OPENAI_API_KEY",
-        "PINECONE_ENVIRONMENT"
     ]
     
     missing_secrets = [secret for secret in required_secrets if secret not in st.secrets]
@@ -133,7 +143,6 @@ def check_secrets():
         ```toml
         PINECONE_API_KEY = "your-pinecone-api-key"
         OPENAI_API_KEY = "your-openai-api-key"
-        PINECONE_ENVIRONMENT = "your-pinecone-environment"  # e.g., "us-east-1-aws"
         ```
         3. Replace the values with your actual API keys
         
@@ -164,30 +173,19 @@ def upload_single_file(file_path):
         st.markdown('<div class="processing-container">', unsafe_allow_html=True)
         
         try:
-            # Initialize Pinecone with error handling
-            pinecone.init(
-                api_key=st.secrets["PINECONE_API_KEY"],
-                environment=st.secrets["PINECONE_ENVIRONMENT"]
+            # Initialize Pinecone with new SDK syntax as in app-pinecone.py
+            from pinecone import Pinecone
+            
+            pc = Pinecone(api_key=PINECONE_API_KEY)
+            
+            # Get the index
+            index = pc.Index(
+                "index",
+                host="index-fmrj1el.svc.aped-4627-b74a.pinecone.io"
             )
             
-            # Test the connection
-            try:
-                index = pinecone.Index("index")
-                # Test if index is accessible
-                index.describe_index_stats()
-            except Exception as e:
-                st.error(f"""
-                Error connecting to Pinecone index. Please verify:
-                1. Your API key is correct
-                2. The environment is correct
-                3. The index name 'index' exists in your Pinecone project
-                
-                Error details: {str(e)}
-                """)
-                st.stop()
-                
             embeddings_model = OpenAIEmbeddings(
-                openai_api_key=st.secrets["OPENAI_API_KEY"],  # Use secrets
+                openai_api_key=OPENAI_API_KEY,
                 model="text-embedding-3-large"
             )
             
