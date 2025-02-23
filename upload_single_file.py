@@ -9,6 +9,7 @@ from PyPDF2 import PdfReader
 import streamlit as st
 from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone, ServerlessSpec
+from langchain_core.documents import Document
 
 # ---------------------------
 # Page Configuration
@@ -257,15 +258,15 @@ def upload_single_file(file_path):
             # Create documents with metadata
             documents = []
             for chunk_idx, chunk in enumerate(chunks):
-                doc = {
-                    'page_content': chunk,
-                    'metadata': {
+                doc = Document(
+                    page_content=chunk,
+                    metadata={
                         'source': file_path.name,
                         'page': chunk_idx + 1,
                         'chunk_idx': chunk_idx,
                         'total_chunks': len(chunks)
                     }
-                }
+                )
                 documents.append(doc)
             
             # Show progress
