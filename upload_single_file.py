@@ -219,6 +219,16 @@ def decode_filename(encoded_filename):
         return original
     return encoded_filename
 
+def truncate_text(text, max_bytes=30000):
+    """Truncate text to stay within Pinecone's metadata size limit"""
+    encoded = text.encode('utf-8')
+    if len(encoded) <= max_bytes:
+        return text
+    
+    # Truncate the encoded bytes and decode back to string
+    truncated = encoded[:max_bytes].decode('utf-8', errors='ignore')
+    return truncated + "... (truncated)"
+
 def upload_single_file(file_path):
     """Upload a single text or PDF file to Pinecone"""
     with st.container():
@@ -267,6 +277,9 @@ def upload_single_file(file_path):
                 try:
                     embedding = embeddings_model.embed_query(chunk)
                     
+                    # Truncate the chunk text for metadata
+                    truncated_text = truncate_text(chunk)
+                    
                     # Use encoded filename in metadata
                     vector = {
                         'id': get_safe_id(safe_filename, i),
@@ -276,7 +289,7 @@ def upload_single_file(file_path):
                             'original_file': file_path.name,  # Store original filename
                             'chunk': i,
                             'total_chunks': len(chunks),
-                            'text': chunk  # Store the chunk text for reference
+                            'text': truncated_text  # Store truncated text
                         }
                     }
                     vectors.append(vector)
