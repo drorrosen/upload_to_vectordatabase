@@ -256,28 +256,27 @@ def upload_single_file(file_path):
             chunks = text_splitter.split_text(content)
             st.write(f"Split into {len(chunks)} chunks")
             
-            # Create documents with minimal metadata
+            # Initialize embeddings and create documents
             documents = []
             for i, chunk in enumerate(chunks):
-                doc = Document(
-                    page_content=chunk,
-                    metadata={
+                embedding = embeddings_model.embed_query(chunk)
+                
+                vector = {
+                    'id': f"doc_{i}",
+                    'values': embedding,
+                    'metadata': {
                         'file': file_path.name,
-                        'idx': i,
-                        'start': i * (text_splitter.chunk_size - text_splitter.chunk_overlap),
-                        'length': len(chunk)
+                        'idx': i
                     }
-                )
-                documents.append(doc)
-            
-            # Process in smaller batches
-            batch_size = 1  # Process one at a time
+                }
+                documents.append(vector)
             
             # Show progress
             progress_bar = st.progress(0)
             status_text = st.empty()
             
-            # Upload in batches using vector store
+            # Upload directly to Pinecone index
+            batch_size = 1
             for i in range(0, len(documents), batch_size):
                 batch = documents[i:i + batch_size]
                 progress = (i + len(batch)) / len(documents)
@@ -285,17 +284,14 @@ def upload_single_file(file_path):
                 status_text.write(f"מעלה חלקים {i + 1} עד {min(i + batch_size, len(documents))} מתוך {len(documents)}")
                 
                 try:
-                    vector_store.add_documents(batch)
+                    index.upsert(
+                        vectors=batch,
+                        namespace="Default"
+                    )
                     status_text.write("הקבוצה הועלתה בהצלחה")
                 except Exception as e:
                     st.error(f"שגיאה בהעלאת קבוצה: {str(e)}")
-                    if "2MB" in str(e):
-                        # Try with smaller batch
-                        half_batch = len(batch) // 2
-                        vector_store.add_documents(batch[:half_batch])
-                        vector_store.add_documents(batch[half_batch:])
-                    else:
-                        raise e
+                    raise e
                 
                 time.sleep(1)
             
