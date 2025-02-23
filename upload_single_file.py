@@ -7,7 +7,6 @@ import time
 import hashlib
 from PyPDF2 import PdfReader
 import streamlit as st
-from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone, ServerlessSpec
 from langchain_core.documents import Document
 
@@ -220,21 +219,12 @@ def upload_single_file(file_path):
             )
             
             # Initialize Pinecone with new SDK syntax
-            from pinecone import Pinecone
-            from langchain_pinecone import PineconeVectorStore
-            
             pc = Pinecone(api_key=PINECONE_API_KEY)
             
-            # Get the index
+            # Get the index directly
             index = pc.Index(
                 "index",
                 host="index-fmrj1el.svc.aped-4627-b74a.pinecone.io"
-            )
-            
-            vector_store = PineconeVectorStore.from_existing_index(
-                index_name="index",
-                embedding=embeddings_model,
-                namespace="Default"
             )
             
             # Initialize text splitter with smaller chunk size
@@ -256,32 +246,34 @@ def upload_single_file(file_path):
             chunks = text_splitter.split_text(content)
             st.write(f"Split into {len(chunks)} chunks")
             
-            # Initialize embeddings and create documents
-            documents = []
+            # Create vectors directly for Pinecone
+            vectors = []
             for i, chunk in enumerate(chunks):
                 embedding = embeddings_model.embed_query(chunk)
                 
+                # Create vector with minimal metadata
                 vector = {
-                    'id': f"doc_{i}",
+                    'id': f"{file_path.stem}_{i}",
                     'values': embedding,
                     'metadata': {
                         'file': file_path.name,
-                        'idx': i
+                        'chunk': i,
+                        'total_chunks': len(chunks)
                     }
                 }
-                documents.append(vector)
+                vectors.append(vector)
             
             # Show progress
             progress_bar = st.progress(0)
             status_text = st.empty()
             
-            # Upload directly to Pinecone index
+            # Upload directly to Pinecone in small batches
             batch_size = 1
-            for i in range(0, len(documents), batch_size):
-                batch = documents[i:i + batch_size]
-                progress = (i + len(batch)) / len(documents)
+            for i in range(0, len(vectors), batch_size):
+                batch = vectors[i:i + batch_size]
+                progress = (i + len(batch)) / len(vectors)
                 progress_bar.progress(progress)
-                status_text.write(f"מעלה חלקים {i + 1} עד {min(i + batch_size, len(documents))} מתוך {len(documents)}")
+                status_text.write(f"מעלה חלקים {i + 1} עד {min(i + batch_size, len(vectors))} מתוך {len(vectors)}")
                 
                 try:
                     index.upsert(
@@ -296,7 +288,7 @@ def upload_single_file(file_path):
                 time.sleep(1)
             
             st.success(f"הקובץ '{file_path.name}' הועלה בהצלחה!")
-            st.write(f"סך הכל עובדו {len(documents)} חלקים")
+            st.write(f"סך הכל עובדו {len(vectors)} חלקים")
             
         except Exception as e:
             st.error(f"שגיאה בעיבוד הקובץ: {str(e)}")
