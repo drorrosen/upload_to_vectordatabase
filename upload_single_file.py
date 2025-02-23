@@ -226,12 +226,12 @@ def upload_single_file(file_path):
             
             # Get the index
             index = pc.Index(
-                "cpa-docs",
+                "index",
                 host="index-fmrj1el.svc.aped-4627-b74a.pinecone.io"
             )
             
             vector_store = PineconeVectorStore.from_existing_index(
-                index_name="cpa-docs",
+                index_name="index",
                 embedding=embeddings_model,
                 namespace="Default"
             )
@@ -336,7 +336,7 @@ def main():
             model="text-embedding-3-large"
         )
         vector_store = PineconeVectorStore.from_existing_index(
-            index_name="cpa-docs",
+            index_name="index",
             embedding=embeddings_model,
             namespace="Default"
         )
