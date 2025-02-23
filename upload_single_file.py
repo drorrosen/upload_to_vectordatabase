@@ -212,25 +212,26 @@ def upload_single_file(file_path):
         st.markdown('<div class="processing-container">', unsafe_allow_html=True)
         
         try:
-            pc = Pinecone(
-                api_key=os.getenv("PINECONE_API_KEY")
-            )
-            
-            index = pc.Index(
-                "index",
-                host="index-fmrj1el.svc.aped-4627-b74a.pinecone.io",
-                pool_threads=30,
-            )
-            
             # Initialize embeddings model
             embeddings_model = OpenAIEmbeddings(
                 openai_api_key=OPENAI_API_KEY,
                 model="text-embedding-3-large"
             )
             
-            # Initialize vector store like in app-pinecone.py
+            # Initialize Pinecone with new SDK syntax
+            from pinecone import Pinecone
+            from langchain_pinecone import PineconeVectorStore
+            
+            pc = Pinecone(api_key=PINECONE_API_KEY)
+            
+            # Get the index
+            index = pc.Index(
+                "cpa-docs",
+                host="index-fmrj1el.svc.aped-4627-b74a.pinecone.io"
+            )
+            
             vector_store = PineconeVectorStore.from_existing_index(
-                index_name="index",
+                index_name="cpa-docs",
                 embedding=embeddings_model,
                 namespace="Default"
             )
@@ -335,7 +336,7 @@ def main():
             model="text-embedding-3-large"
         )
         vector_store = PineconeVectorStore.from_existing_index(
-            index_name="index",
+            index_name="cpa-docs",
             embedding=embeddings_model,
             namespace="Default"
         )
