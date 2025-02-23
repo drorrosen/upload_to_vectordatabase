@@ -173,16 +173,14 @@ def upload_single_file(file_path):
         st.markdown('<div class="processing-container">', unsafe_allow_html=True)
         
         try:
-            # Initialize Pinecone with new SDK syntax as in app-pinecone.py
-            from pinecone import Pinecone
-            
-            pc = Pinecone(api_key=PINECONE_API_KEY)
+            # Initialize Pinecone with older SDK syntax
+            pinecone.init(
+                api_key=PINECONE_API_KEY,
+                environment=PINECONE_ENVIRONMENT
+            )
             
             # Get the index
-            index = pc.Index(
-                "index",
-                host="index-fmrj1el.svc.aped-4627-b74a.pinecone.io"
-            )
+            index = pinecone.Index("index")
             
             embeddings_model = OpenAIEmbeddings(
                 openai_api_key=OPENAI_API_KEY,
