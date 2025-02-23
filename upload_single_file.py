@@ -7,6 +7,7 @@ import time
 import hashlib
 from PyPDF2 import PdfReader
 import streamlit as st
+from langchain_pinecone import PineconeVectorStore
 
 # ---------------------------
 # Page Configuration
@@ -179,12 +180,17 @@ def upload_single_file(file_path):
                 environment=PINECONE_ENVIRONMENT
             )
             
-            # Get the index
-            index = pinecone.Index("index")
-            
+            # Initialize embeddings model
             embeddings_model = OpenAIEmbeddings(
                 openai_api_key=OPENAI_API_KEY,
                 model="text-embedding-3-large"
+            )
+            
+            # Initialize vector store like in app-pinecone.py
+            vector_store = PineconeVectorStore.from_existing_index(
+                index_name="index",
+                embedding=embeddings_model,
+                namespace="Default"
             )
             
             text_splitter = RecursiveCharacterTextSplitter(
@@ -202,91 +208,52 @@ def upload_single_file(file_path):
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
             
-            # Add document separator to help with context
-            content = f"\n\n=== Document: {file_path.name}\n\n" + content
-            
             chunks = text_splitter.split_text(content)
             st.write(f"Split into {len(chunks)} chunks")
             
-            vectors_to_upsert = []
-            batch_size = 5
-            total_chunks = 0
+            # Create documents with metadata
+            documents = []
+            for chunk_idx, chunk in enumerate(chunks):
+                doc = {
+                    'page_content': chunk,
+                    'metadata': {
+                        'source': file_path.name,
+                        'page': chunk_idx + 1,
+                        'chunk_idx': chunk_idx,
+                        'total_chunks': len(chunks)
+                    }
+                }
+                documents.append(doc)
             
+            # Show progress
             progress_bar = st.progress(0)
             status_text = st.empty()
             
-            for chunk_idx, chunk in enumerate(chunks):
+            # Upload in batches using vector store
+            batch_size = 5
+            for i in range(0, len(documents), batch_size):
+                batch = documents[i:i + batch_size]
+                progress = (i + len(batch)) / len(documents)
+                progress_bar.progress(progress)
+                status_text.write(f"מעלה חלקים {i + 1} עד {min(i + batch_size, len(documents))} מתוך {len(documents)}")
+                
                 try:
-                    progress = (chunk_idx + 1) / len(chunks)
-                    progress_bar.progress(progress)
-                    status_text.write(f"מעבד חלק {chunk_idx + 1} מתוך {len(chunks)}")
-                    
-                    embedding = embeddings_model.embed_query(chunk)
-                    safe_id = get_safe_id(file_path.name, chunk_idx)
-                    
-                    # Ensure metadata matches what the query expects
-                    vector = {
-                        'id': safe_id,
-                        'values': embedding,
-                        'metadata': {
-                            'source': file_path.name,  # Changed from 'file' to 'source' to match query
-                            'page': chunk_idx + 1,     # Add page number for better context
-                            'text': chunk,             # Store full chunk text
-                            'chunk_idx': chunk_idx,
-                            'total_chunks': len(chunks)
-                        }
-                    }
-                    vectors_to_upsert.append(vector)
-                    total_chunks += 1
-                    
-                    if len(vectors_to_upsert) >= batch_size:
-                        status_text.write(f"מעלה קבוצה של {len(vectors_to_upsert)} וקטורים...")
-                        try:
-                            index.upsert(
-                                vectors=vectors_to_upsert,
-                                namespace="Default"
-                            )
-                            status_text.write("הקבוצה הועלתה בהצלחה")
-                        except Exception as e:
-                            if "2MB" in str(e):
-                                half_batch = len(vectors_to_upsert) // 2
-                                status_text.write(f"מנסה שוב עם קבוצה קטנה יותר של {half_batch}")
-                                index.upsert(
-                                    vectors=vectors_to_upsert[:half_batch],
-                                    namespace="Default"
-                                )
-                                vectors_to_upsert = vectors_to_upsert[half_batch:]
-                                continue
-                            else:
-                                raise e
-                        vectors_to_upsert = []
-                        time.sleep(1)  # Reduced sleep time
-                    
+                    vector_store.add_documents(batch)
+                    status_text.write("הקבוצה הועלתה בהצלחה")
                 except Exception as e:
-                    st.error(f"שגיאה בעיבוד חלק: {str(e)}")
-                    continue
-            
-            # Handle remaining vectors
-            if vectors_to_upsert:
-                try:
-                    index.upsert(
-                        vectors=vectors_to_upsert,
-                        namespace="Default"
-                    )
-                except Exception as e:
+                    st.error(f"שגיאה בהעלאת קבוצה: {str(e)}")
                     if "2MB" in str(e):
-                        half_batch = len(vectors_to_upsert) // 2
-                        index.upsert(
-                            vectors=vectors_to_upsert[:half_batch],
-                            namespace="Default"
-                        )
-                        index.upsert(
-                            vectors=vectors_to_upsert[half_batch:],
-                            namespace="Default"
-                        )
+                        # Try with smaller batch
+                        half_batch = len(batch) // 2
+                        vector_store.add_documents(batch[:half_batch])
+                        vector_store.add_documents(batch[half_batch:])
+                    else:
+                        raise e
+                
+                time.sleep(1)
             
             st.success(f"הקובץ '{file_path.name}' הועלה בהצלחה!")
-            st.write(f"סך הכל עובדו {total_chunks} חלקים")
+            st.write(f"סך הכל עובדו {len(documents)} חלקים")
             
         except Exception as e:
             st.error(f"שגיאה בעיבוד הקובץ: {str(e)}")
