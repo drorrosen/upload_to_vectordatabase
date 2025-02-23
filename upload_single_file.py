@@ -252,9 +252,9 @@ def upload_single_file(file_path):
             for i, chunk in enumerate(chunks):
                 embedding = embeddings_model.embed_query(chunk)
                 
-                # Create vector with minimal metadata
+                # Create vector with minimal metadata and safe ID
                 vector = {
-                    'id': f"{file_path.stem}_{i}",
+                    'id': get_safe_id(file_path.name, i),
                     'values': embedding,
                     'metadata': {
                         'file': file_path.name,
