@@ -255,26 +255,27 @@ def upload_single_file(file_path):
             chunks = text_splitter.split_text(content)
             st.write(f"Split into {len(chunks)} chunks")
             
-            # Create documents with metadata
+            # Create documents with minimal metadata
             documents = []
             for chunk_idx, chunk in enumerate(chunks):
                 doc = Document(
                     page_content=chunk,
                     metadata={
-                        'source': file_path.name,
-                        'page': chunk_idx + 1,
-                        'chunk_idx': chunk_idx,
-                        'total_chunks': len(chunks)
+                        'source': str(file_path.name),  # Convert to string to ensure serialization
+                        'chunk': chunk_idx,  # Simplified identifier
+                        'total': len(chunks)  # Total number of chunks
                     }
                 )
                 documents.append(doc)
+            
+            # Reduce batch size to handle large documents better
+            batch_size = 2  # Reduced from 5 to 2
             
             # Show progress
             progress_bar = st.progress(0)
             status_text = st.empty()
             
             # Upload in batches using vector store
-            batch_size = 5
             for i in range(0, len(documents), batch_size):
                 batch = documents[i:i + batch_size]
                 progress = (i + len(batch)) / len(documents)
