@@ -1,5 +1,5 @@
 import os
-from pinecone import Pinecone
+import pinecone
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from pathlib import Path
@@ -137,8 +137,9 @@ def upload_single_file(file_path):
         CHUNK_OVERLAP = 20000
         
         # Initialize Pinecone
-        pc = Pinecone(
-            api_key=st.secrets["PINECONE_API_KEY"],  # Use secrets instead of hardcoded keys
+        pinecone.init(
+            api_key=st.secrets["PINECONE_API_KEY"],
+            environment=st.secrets["PINECONE_ENVIRONMENT"]
         )
         
         embeddings_model = OpenAIEmbeddings(
@@ -152,10 +153,7 @@ def upload_single_file(file_path):
             separators=["\n\n=== Document:", "\n\n", "\n", " ", ""]
         )
         
-        index = pc.Index(
-            "index",
-            host=st.secrets["PINECONE_HOST"],  # Use secrets
-        )
+        index = pinecone.Index("index")
         
         file_path = Path(file_path)
         
