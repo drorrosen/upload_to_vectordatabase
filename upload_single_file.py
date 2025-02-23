@@ -256,7 +256,7 @@ def upload_single_file(file_path):
             chunks = text_splitter.split_text(content)
             st.write(f"Split into {len(chunks)} chunks")
             
-            # Create documents with limited metadata
+            # Create documents with minimal metadata
             documents = []
             for i, chunk in enumerate(chunks):
                 doc = Document(
@@ -264,7 +264,6 @@ def upload_single_file(file_path):
                     metadata={
                         'file': file_path.name,
                         'idx': i,
-                        'text': chunk[:20000],  # Limit text in metadata to 20KB
                         'start': i * (text_splitter.chunk_size - text_splitter.chunk_overlap),
                         'length': len(chunk)
                     }
