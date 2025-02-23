@@ -212,23 +212,15 @@ def upload_single_file(file_path):
         st.markdown('<div class="processing-container">', unsafe_allow_html=True)
         
         try:
-            # מחליף את pinecone.init עם יצירת אובייקט Pinecone
-            pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+            pc = Pinecone(
+                api_key=os.getenv("PINECONE_API_KEY")
+            )
             
-            # בדיקה אם האינדקס קיים
-            if INDEX_NAME not in pc.list_indexes().names():
-                pc.create_index(
-                    name=INDEX_NAME,
-                    dimension=1536,
-                    metric='cosine',
-                    spec=ServerlessSpec(
-                        cloud='aws',
-                        region='us-west-1'
-                    )
-                )
-            
-            # קבלת האינדקס
-            index = pc.Index(INDEX_NAME)
+            index = pc.Index(
+                "index",
+                host="index-fmrj1el.svc.aped-4627-b74a.pinecone.io",
+                pool_threads=30,
+            )
             
             # Initialize embeddings model
             embeddings_model = OpenAIEmbeddings(
