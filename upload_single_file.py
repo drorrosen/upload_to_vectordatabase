@@ -237,6 +237,7 @@ def upload_single_file(file_path):
                 namespace="Default"
             )
             
+            # Initialize text splitter with smaller chunk size
             text_splitter = RecursiveCharacterTextSplitter(
                 chunk_size=80000,
                 chunk_overlap=20000,
@@ -255,21 +256,23 @@ def upload_single_file(file_path):
             chunks = text_splitter.split_text(content)
             st.write(f"Split into {len(chunks)} chunks")
             
-            # Create documents with minimal metadata
+            # Create documents with limited metadata
             documents = []
-            for chunk_idx, chunk in enumerate(chunks):
+            for i, chunk in enumerate(chunks):
                 doc = Document(
                     page_content=chunk,
                     metadata={
-                        'source': str(file_path.name),  # Convert to string to ensure serialization
-                        'chunk': chunk_idx,  # Simplified identifier
-                        'total': len(chunks)  # Total number of chunks
+                        'file': file_path.name,
+                        'idx': i,
+                        'text': chunk[:20000],  # Limit text in metadata to 20KB
+                        'start': i * (text_splitter.chunk_size - text_splitter.chunk_overlap),
+                        'length': len(chunk)
                     }
                 )
                 documents.append(doc)
             
-            # Reduce batch size to handle large documents better
-            batch_size = 2  # Reduced from 5 to 2
+            # Process in smaller batches
+            batch_size = 1  # Process one at a time
             
             # Show progress
             progress_bar = st.progress(0)
