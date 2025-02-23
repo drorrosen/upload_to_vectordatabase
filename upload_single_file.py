@@ -8,6 +8,7 @@ import hashlib
 from PyPDF2 import PdfReader
 import streamlit as st
 from langchain_pinecone import PineconeVectorStore
+from pinecone import Pinecone, ServerlessSpec
 
 # ---------------------------
 # Page Configuration
@@ -111,6 +112,43 @@ st.markdown("""
         color: #64748B;
         font-size: 0.9em;
     }
+    
+    /* Document List Panel */
+    .document-list {
+        background: rgba(30, 41, 59, 0.6);
+        padding: 1rem;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        margin-top: 1rem;
+    }
+    
+    .document-item {
+        background: rgba(255, 255, 255, 0.15);
+        padding: 12px 15px;
+        border-radius: 8px;
+        margin: 8px 0;
+        border-right: 4px solid #38BDF8;
+        font-size: 1.1em;
+        color: #FFFFFF !important;
+        font-weight: 500;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+        display: block;
+        transition: all 0.2s ease;
+    }
+
+    .document-item:hover {
+        background: rgba(255, 255, 255, 0.25);
+        transform: translateX(-5px);
+    }
+
+    /* Sidebar header */
+    .sidebar-header {
+        color: #38BDF8 !important;
+        font-size: 1.3em !important;
+        font-weight: bold !important;
+        margin-bottom: 15px !important;
+        text-align: center !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -174,11 +212,23 @@ def upload_single_file(file_path):
         st.markdown('<div class="processing-container">', unsafe_allow_html=True)
         
         try:
-            # Initialize Pinecone with older SDK syntax
-            pinecone.init(
-                api_key=PINECONE_API_KEY,
-                environment=PINECONE_ENVIRONMENT
-            )
+            # מחליף את pinecone.init עם יצירת אובייקט Pinecone
+            pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+            
+            # בדיקה אם האינדקס קיים
+            if INDEX_NAME not in pc.list_indexes().names():
+                pc.create_index(
+                    name=INDEX_NAME,
+                    dimension=1536,
+                    metric='cosine',
+                    spec=ServerlessSpec(
+                        cloud='aws',
+                        region='us-west-1'
+                    )
+                )
+            
+            # קבלת האינדקס
+            index = pc.Index(INDEX_NAME)
             
             # Initialize embeddings model
             embeddings_model = OpenAIEmbeddings(
@@ -261,6 +311,19 @@ def upload_single_file(file_path):
         
         st.markdown('</div>', unsafe_allow_html=True)
 
+def get_available_documents(vector_store):
+    """Get list of unique documents in the vector store"""
+    try:
+        results = vector_store.similarity_search_with_score("", k=1000)
+        unique_docs = set()
+        for doc, _ in results:
+            if 'source' in doc.metadata:
+                unique_docs.add(doc.metadata['source'])
+        return sorted(list(unique_docs))
+    except Exception as e:
+        st.error(f"Error fetching documents: {str(e)}")
+        return []
+
 def main():
     # Add secrets check at the start of main
     check_secrets()
@@ -273,19 +336,58 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    uploaded_file = st.file_uploader("בחר קובץ להעלאה", type=['pdf', 'txt'])
+    # Initialize vector store for document listing
+    try:
+        embeddings_model = OpenAIEmbeddings(
+            openai_api_key=OPENAI_API_KEY,
+            model="text-embedding-3-large"
+        )
+        vector_store = PineconeVectorStore.from_existing_index(
+            index_name="index",
+            embedding=embeddings_model,
+            namespace="Default"
+        )
+    except Exception as e:
+        st.error(f"Error initializing vector store: {str(e)}")
+        vector_store = None
     
-    if uploaded_file is not None:
-        with st.spinner('מעבד את הקובץ...'):
-            temp_path = Path(f"temp_{uploaded_file.name}")
-            with open(temp_path, "wb") as f:
-                f.write(uploaded_file.getvalue())
+    # Create two columns
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        uploaded_file = st.file_uploader("בחר קובץ להעלאה", type=['pdf', 'txt'])
+        
+        if uploaded_file is not None:
+            with st.spinner('מעבד את הקובץ...'):
+                temp_path = Path(f"temp_{uploaded_file.name}")
+                with open(temp_path, "wb") as f:
+                    f.write(uploaded_file.getvalue())
+                
+                try:
+                    upload_single_file(temp_path)
+                finally:
+                    if temp_path.exists():
+                        temp_path.unlink()
+    
+    with col2:
+        st.markdown('<div class="sidebar-header">מסמכים במערכת</div>', unsafe_allow_html=True)
+        
+        # Add auto-refresh placeholder
+        doc_list_placeholder = st.empty()
+        
+        # Auto-refresh documents every 30 seconds
+        while True:
+            if vector_store:
+                documents = get_available_documents(vector_store)
+                with doc_list_placeholder.container():
+                    if documents:
+                        for doc in documents:
+                            st.markdown(f'<div class="document-item">📑 {doc}</div>', 
+                                      unsafe_allow_html=True)
+                    else:
+                        st.info("אין מסמכים במערכת")
             
-            try:
-                upload_single_file(temp_path)
-            finally:
-                if temp_path.exists():
-                    temp_path.unlink()
+            time.sleep(30)  # Wait for 30 seconds before next refresh
     
     # Footer
     st.markdown("""
