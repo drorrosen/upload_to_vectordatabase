@@ -426,20 +426,22 @@ def main():
         st.error(f"Error initializing Pinecone: {str(e)}")
         st.stop()
     
-    # File upload section
-    uploaded_file = st.file_uploader("בחר קובץ להעלאה", type=['pdf', 'txt'])
+    # File upload section - Modified for multiple files
+    uploaded_files = st.file_uploader("בחר קבצים להעלאה", type=['pdf', 'txt'], accept_multiple_files=True)
     
-    if uploaded_file is not None:
-        with st.spinner('מעבד את הקובץ...'):
-            temp_path = Path(f"temp_{uploaded_file.name}")
-            with open(temp_path, "wb") as f:
-                f.write(uploaded_file.getvalue())
-            
-            try:
-                upload_single_file(temp_path)
-            finally:
-                if temp_path.exists():
-                    temp_path.unlink()
+    if uploaded_files:
+        for uploaded_file in uploaded_files:
+            st.write(f"מעבד קובץ: {uploaded_file.name}")
+            with st.spinner(f'מעבד את הקובץ {uploaded_file.name}...'):
+                temp_path = Path(f"temp_{uploaded_file.name}")
+                with open(temp_path, "wb") as f:
+                    f.write(uploaded_file.getvalue())
+                
+                try:
+                    upload_single_file(temp_path)
+                finally:
+                    if temp_path.exists():
+                        temp_path.unlink()
     
     # Add a separator
     st.markdown("---")
