@@ -225,11 +225,10 @@ def upload_single_file(file_path):
         st.markdown('<div class="processing-container">', unsafe_allow_html=True)
         
         try:
-            # Initialize embeddings model
+            # Initialize embeddings model - remove dimensions parameter
             embeddings_model = OpenAIEmbeddings(
                 openai_api_key=OPENAI_API_KEY,
-                model="text-embedding-ada-002",  # This model outputs 1536 dimensions
-                dimensions=3072  # Request 3072 dimensions to match index
+                model="text-embedding-3-large"  # This model outputs 3072 dimensions
             )
             
             # Initialize Pinecone with new SDK syntax
@@ -265,20 +264,29 @@ def upload_single_file(file_path):
             
             vectors = []
             for i, chunk in enumerate(chunks):
-                embedding = embeddings_model.embed_query(chunk)
-                
-                # Use encoded filename in metadata
-                vector = {
-                    'id': get_safe_id(safe_filename, i),
-                    'values': embedding,
-                    'metadata': {
-                        'file': safe_filename,  # Store encoded filename
-                        'original_file': file_path.name,  # Store original filename
-                        'chunk': i,
-                        'total_chunks': len(chunks)
+                try:
+                    embedding = embeddings_model.embed_query(chunk)
+                    
+                    # Use encoded filename in metadata
+                    vector = {
+                        'id': get_safe_id(safe_filename, i),
+                        'values': embedding,
+                        'metadata': {
+                            'file': safe_filename,  # Store encoded filename
+                            'original_file': file_path.name,  # Store original filename
+                            'chunk': i,
+                            'total_chunks': len(chunks),
+                            'text': chunk  # Store the chunk text for reference
+                        }
                     }
-                }
-                vectors.append(vector)
+                    vectors.append(vector)
+                except Exception as e:
+                    st.error(f"Error embedding chunk {i}: {str(e)}")
+                    continue
+            
+            if not vectors:
+                st.error("No vectors were created successfully")
+                return
             
             # Show progress
             progress_bar = st.progress(0)
@@ -300,7 +308,7 @@ def upload_single_file(file_path):
                     status_text.write("הקבוצה הועלתה בהצלחה")
                 except Exception as e:
                     st.error(f"שגיאה בהעלאת קבוצה: {str(e)}")
-                    raise e
+                    continue
                 
                 time.sleep(1)
             
