@@ -228,7 +228,8 @@ def upload_single_file(file_path):
             # Initialize embeddings model
             embeddings_model = OpenAIEmbeddings(
                 openai_api_key=OPENAI_API_KEY,
-                model="text-embedding-3-large"
+                model="text-embedding-ada-002",  # This model outputs 1536 dimensions
+                dimensions=3072  # Request 3072 dimensions to match index
             )
             
             # Initialize Pinecone with new SDK syntax
@@ -351,7 +352,7 @@ def list_documents_in_pinecone(index, namespace="Default"):
         
         # Query to fetch some recent documents
         fetch_response = index.query(
-            vector=[0] * 1536,  # dummy vector
+            vector=[0] * 3072,  # Updated to match index dimension of 3072
             top_k=100,
             namespace=namespace,
             include_metadata=True
