@@ -2,7 +2,6 @@ import os
 import pinecone
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
-from langchain_pinecone import PineconeVectorStore
 from pathlib import Path
 import time
 import hashlib
